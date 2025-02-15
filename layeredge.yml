@@ -1,0 +1,61 @@
+name: LayerEdge
+
+on:
+  schedule:
+    - cron: '0 */8 * * *'
+  workflow_dispatch:
+
+jobs:
+  start-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Clone repo
+        run: git clone https://github.com/Ryanda1106/layeredgebot.git
+
+      - name: Fetch privateKeys.json
+        working-directory: layeredgebot
+        run: |
+          echo "🔄 Fetching privateKeys.json..."
+          curl -H "Authorization: token ${{ secrets.PRIVATE_SECRET }}" \
+               -H "Accept: application/vnd.github.v3" \
+               https://api.github.com/repos/username/private/contents/privateKeys.json \
+               | jq -r '.content' | base64 --decode > privateKeys.json
+
+          if ! jq empty privateKeys.json >/dev/null 2>&1; then
+            echo "⚠️ Invalid JSON detected! Replacing with an empty array."
+            echo "[]" > privateKeys.json
+          fi
+
+      - name: Install Dependencies
+        working-directory: layeredgebot
+        run: npm install
+
+      - name: Run Script
+        working-directory: layeredgebot
+        run: node layeredge.js
+
+      - name: Copy Log File to Root Directory
+        working-directory: layeredgebot
+        run: cp log-layeredge.txt ../
+
+      - name: Commit and Push Updated Log
+        run: |
+            git config --global user.name "username"
+            git config --global user.email "example@gmail.com"
+            git add log-layeredge.txt
+            git commit -m "Update log-layeredge.txt"
+            git push origin main
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup
+        run: rm -rf layeredgebot
