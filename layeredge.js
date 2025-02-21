@@ -1,9 +1,8 @@
-const fs = require('fs');
-const axios = require('axios');
-const ethers = require('ethers');
-const moment = require('moment');
-const privateKeys = require('./privateKeys.json');
-const momentlog = require('moment-timezone');
+import { ethers } from 'ethers';
+import fs from 'fs';
+import axios from 'axios';
+import moment from 'moment';
+import momentlog from 'moment-timezone'
 
 const BASE_URL = 'https://referralapi.layeredge.io/api';
 const HEADERS = {
@@ -24,6 +23,34 @@ const HEADERS = {
     'sec-gpc': '1',
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
 };
+
+async function readWallets() {
+    try {
+        await fs.accessSync("wallets.json");
+        const data = await fs.readFileSync("wallets.json", "utf-8");
+        return JSON.parse(data);
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            logger.info("No wallets found in wallets.json");
+            return [];
+        }
+        throw err;
+    }
+}
+
+async function readReffCodes() {
+    try {
+        await fs.accessSync("wallets.json");
+        const data = await fs.readFileSync("reffCodes.json", "utf-8");
+        return JSON.parse(data);
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            logger.info("No wallets found in wallets.json");
+            return [];
+        }
+        throw err;
+    }
+}
 
 function logToReadme(log) {
     const logEntry = `${log}\n`;
@@ -131,14 +158,16 @@ async function processWallet(privateKey, inviteCode) {
         await startNode(walletAddress, privateKey);
     }
 }
-const reffCodes = ['jMY1tyg4'];
+
 const main = async () => {
-    for (let i = 0; i < privateKeys.length; i++) {
+    let wallets = await readWallets();
+    let reffCodes = await readReffCodes();
+    for (let i = 0; i < wallets.length; i++) {
         const randomIndex = Math.floor(Math.random() * reffCodes.length);
         const reffCode = reffCodes[randomIndex];
 
-        console.log(`[${i+1}] Processing ${new ethers.Wallet(privateKeys[i]).address}`);
-        await processWallet(privateKeys[i], reffCode);
+        console.log(`[${i+1}] Processing ${new ethers.Wallet(wallets[i].privateKey).address}`);
+        await processWallet(wallets[i].privateKey, reffCode);
     }
 };
 
