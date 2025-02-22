@@ -24,6 +24,10 @@ const HEADERS = {
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
 };
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function readWallets() {
     try {
         await fs.accessSync("wallets.json");
@@ -168,6 +172,7 @@ const main = async () => {
 
         console.log(`[${i+1}] Processing ${new ethers.Wallet(wallets[i].privateKey).address}`);
         await processWallet(wallets[i].privateKey, reffCode);
+        await sleep(5 * 1000)
     }
 };
 
