@@ -171,7 +171,13 @@ const main = async () => {
         const reffCode = reffCodes[randomIndex];
 
         console.log(`[${i+1}] Processing ${new ethers.Wallet(wallets[i].privateKey).address}`);
-        await processWallet(wallets[i].privateKey, reffCode);
+
+        try {
+            await processWallet(wallets[i].privateKey, reffCode);
+        } catch (error) {
+            logToReadme(`[${timelog()}] 🚨 Error processing wallet ${new ethers.Wallet(wallets[i].privateKey).address}: ${error.message}`);
+        }
+        
         await sleep(1 * 1000)
     }
 };
