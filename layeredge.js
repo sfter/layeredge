@@ -172,7 +172,7 @@ const main = async () => {
 
         console.log(`[${i+1}] Processing ${new ethers.Wallet(wallets[i].privateKey).address}`);
         await processWallet(wallets[i].privateKey, reffCode);
-        await sleep(5 * 1000)
+        await sleep(1 * 1000)
     }
 };
 
