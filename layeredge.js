@@ -164,21 +164,33 @@ async function processWallet(privateKey, inviteCode) {
 }
 
 const main = async () => {
-    let wallets = await readWallets();
-    let reffCodes = await readReffCodes();
-    for (let i = 0; i < wallets.length; i++) {
-        const randomIndex = Math.floor(Math.random() * reffCodes.length);
-        const reffCode = reffCodes[randomIndex];
-
-        console.log(`[${i+1}] Processing ${new ethers.Wallet(wallets[i].privateKey).address}`);
-
+    while (true) {  // 无限循环
         try {
-            await processWallet(wallets[i].privateKey, reffCode);
+            logToReadme(`[${timelog()}] 🚀 Starting new processing cycle`);
+            let wallets = await readWallets();
+            let reffCodes = await readReffCodes();
+            
+            for (let i = 0; i < wallets.length; i++) {
+                const randomIndex = Math.floor(Math.random() * reffCodes.length);
+                const reffCode = reffCodes[randomIndex];
+
+                console.log(`[${i+1}] Processing ${new ethers.Wallet(wallets[i].privateKey).address}`);
+
+                try {
+                    await processWallet(wallets[i].privateKey, reffCode);
+                } catch (error) {
+                    logToReadme(`[${timelog()}] 🚨 Error processing wallet ${new ethers.Wallet(wallets[i].privateKey).address}: ${error.message}`);
+                }
+                
+                await sleep(1 * 1000);
+            }
+
+            logToReadme(`[${timelog()}] ✅ Cycle completed. Waiting 24 hours before next cycle...`);
+            await sleep(24 * 60 * 60 * 1000);  // 等待24小时
         } catch (error) {
-            logToReadme(`[${timelog()}] 🚨 Error processing wallet ${new ethers.Wallet(wallets[i].privateKey).address}: ${error.message}`);
+            logToReadme(`[${timelog()}] 🚨 Cycle error: ${error.message}. Retrying in 24 hours...`);
+            await sleep(24 * 60 * 60 * 1000);
         }
-        
-        await sleep(1 * 1000)
     }
 };
 
