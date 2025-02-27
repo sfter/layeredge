@@ -3,6 +3,11 @@ import fs from 'fs';
 import axios from 'axios';
 import moment from 'moment';
 import momentlog from 'moment-timezone'
+ 
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import { SocksProxyAgent } from 'socks-proxy-agent';
+
+const PROXY_FILE = 'proxies.txt';
 
 const BASE_URL = 'https://referralapi.layeredge.io/api';
 const HEADERS = {
@@ -23,6 +28,82 @@ const HEADERS = {
     'sec-gpc': '1',
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
 };
+
+// Proxy Management
+function loadProxies() {
+    try {
+        const content = fs.readFileSync(PROXY_FILE, 'utf8');
+        return content.split('\n')
+            .map(line => line.trim())
+            .filter(line => line && line.length > 0);
+    } catch (error) {
+        console.error('Error loading proxies:', error.message);
+        return [];
+    }
+}
+
+function getRandomProxy(proxies) {
+    if (!proxies.length) return null;
+    return proxies[Math.floor(Math.random() * proxies.length)];
+}
+
+function createProxyAgent(proxy) {
+    if (!proxy) return null;
+    
+    const [auth, hostPort] = proxy.includes('@') ? proxy.split('@') : [null, proxy];
+    const [host, port] = hostPort ? hostPort.split(':') : proxy.split(':');
+    
+    const proxyOptions = {
+        host,
+        port: parseInt(port),
+        ...(auth && {
+            auth: auth.includes(':') ? auth : `${auth}:`
+        })
+    };
+
+    if (proxy.startsWith('socks4://') || proxy.startsWith('socks5://')) {
+        const proxyType = proxy.startsWith('socks5') ? 'SOCKS5' : 'SOCKS4';
+        console.log(`Proxy ${proxyType} dari proxies.txt digunakan: ${proxy}`);
+        return new SocksProxyAgent(`socks${proxy.startsWith('socks5') ? 5 : 4}://${proxy.replace(/^socks[4-5]:\/\//, '')}`);
+    }
+    console.log(`Proxy HTTP dari proxies.txt digunakan: ${proxy}`);
+    return new HttpsProxyAgent(`http://${proxy}`);
+}
+
+async function request(url, options = {}, retries = 3) {
+    const proxies = loadProxies();
+    let proxy = getRandomProxy(proxies);
+    let attempt = 0;
+
+    while (attempt < retries) {
+        const agent = proxy ? createProxyAgent(proxy) : null;
+        if (!proxy) {
+            console.log('Without use proxy.');
+        }
+
+        try {
+            const response = await axios({
+                url,
+                ...options,
+                timeout: 10000, // Set timeout to 10 seconds
+                ...(agent && { httpsAgent: agent, httpAgent: agent })
+            });
+            return response;
+        } catch (error) {
+            attempt++;
+            if (error.code === 'EAI_AGAIN') {
+                console.error(`Kesalahan EAI_AGAIN pada percobaan ${attempt}/${retries} dengan proxy: ${proxy || 'tanpa proxy'}`);
+                if (attempt < retries) {
+                    console.log('Mencoba lagi dengan proxy lain...');
+                    proxy = getRandomProxy(proxies); // Ganti proxy untuk percobaan berikutnya
+                    await new Promise(resolve => setTimeout(resolve, 2000)); // Tunggu 2 detik sebelum retry
+                    continue;
+                }
+            }
+            throw new Error(`Request failed setelah ${retries} percobaan${proxy ? ' dengan proxy ' + proxy : ''}: ${error.message}`);
+        }
+    }
+}
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -61,12 +142,20 @@ function logToReadme(log) {
     fs.appendFileSync('log-layeredge.txt', logEntry, 'utf8');
     console.log(log);
 }
+
 function timelog() {
   return momentlog().tz('Asia/Jakarta').format('HH:mm:ss | DD-MM-YYYY');
 }
+
 async function checkWallet(walletAddress) {
     try {
-        const response = await axios.get(`${BASE_URL}/referral/wallet-details/${walletAddress}`, { headers: HEADERS });
+        //const response = await axios.get(`${BASE_URL}/referral/wallet-details/${walletAddress}`, { headers: HEADERS });
+
+        const response = await request(`${BASE_URL}/referral/wallet-details/${walletAddress}`, {
+            method: 'GET',
+            headers: HEADERS,
+        });
+
         return response.data;
     } catch (error) {
         if (error.response && error.response.status === 404) {
@@ -78,7 +167,14 @@ async function checkWallet(walletAddress) {
 
 async function validateInviteCode(inviteCode) {
     try {
-        const response = await axios.post(`${BASE_URL}/referral/verify-referral-code`, { invite_code: inviteCode }, { headers: HEADERS });
+        //const response = await axios.post(`${BASE_URL}/referral/verify-referral-code`, { invite_code: inviteCode }, { headers: HEADERS });
+        
+        const response = await request(`${BASE_URL}/referral/verify-referral-code`, {
+            method: 'POST',
+            data: { invite_code: inviteCode },
+            headers: HEADERS,
+        });
+
         return response.data.data.valid;
     } catch (error) {
         return false;
@@ -92,7 +188,14 @@ async function registerWallet(walletAddress, inviteCode) {
     }
     
     try {
-        const response = await axios.post(`${BASE_URL}/referral/register-wallet/${inviteCode}`, { walletAddress }, { headers: HEADERS });
+        //const response = await axios.post(`${BASE_URL}/referral/register-wallet/${inviteCode}`, { walletAddress }, { headers: HEADERS });
+
+        const response = await request(`${BASE_URL}/referral/register-wallet/${inviteCode}`, {
+            method: 'POST',
+            data: { walletAddress },
+            headers: HEADERS,
+        });
+
         logToReadme(`[${timelog()}] ✅ Wallet ${walletAddress} registered successfully.`);
         return response.data;
     } catch (error) {
@@ -107,7 +210,14 @@ async function claimPoints(walletAddress, privateKey) {
     const sign = await wallet.signMessage(message);
     
     try {
-        const response = await axios.post(`${BASE_URL}/light-node/claim-node-points`, { walletAddress, timestamp, sign }, { headers: HEADERS });
+        //const response = await axios.post(`${BASE_URL}/light-node/claim-node-points`, { walletAddress, timestamp, sign }, { headers: HEADERS });
+
+        const response = await request(`${BASE_URL}/light-node/claim-node-points`, {
+            method: 'POST',
+            data: { walletAddress, timestamp, sign },
+            headers: HEADERS,
+        });
+
         logToReadme(`[${timelog()}] ✅ Points claimed for ${walletAddress}`);
         return response.data;
     } catch (error) {
@@ -122,7 +232,14 @@ async function startNode(walletAddress, privateKey) {
     const sign = await wallet.signMessage(message);
     
     try {
-        const response = await axios.post(`${BASE_URL}/light-node/node-action/${walletAddress}/start`, { timestamp, sign }, { headers: HEADERS });
+        //const response = await axios.post(`${BASE_URL}/light-node/node-action/${walletAddress}/start`, { timestamp, sign }, { headers: HEADERS });
+
+        const response = await request(`${BASE_URL}/light-node/node-action/${walletAddress}/start`, {
+            method: 'POST',
+            data: { timestamp, sign },
+            headers: HEADERS,
+        });
+
         logToReadme(`[${timelog()}] ✅ Node started for ${walletAddress}`);
         return response.data;
     } catch (error) {
