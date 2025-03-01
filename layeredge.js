@@ -225,73 +225,6 @@ async function claimPoints(walletAddress, privateKey) {
     }
 }
 
-async function runBrowserLightNodeTask(walletAddress, privateKey) {
-    const wallet = new ethers.Wallet(privateKey);
-    const timestamp = Date.now();
-    const message = `I am claiming Run a Browser-Based Light Node Points for ${walletAddress} at ${timestamp}`;
-    const sign = await wallet.signMessage(message);
-    
-    try {
-        //const response = await axios.post(`${BASE_URL}/light-node/claim-node-points`, { walletAddress, timestamp, sign }, { headers: HEADERS });
-
-        const response = await request(`${BASE_URL}/task/node-points`, {
-            method: 'POST',
-            data: { walletAddress, timestamp, sign },
-            headers: HEADERS,
-        });
-
-        logToReadme(`[${timelog()}] ✅ Points claimed for ${walletAddress}`);
-        return response.data;
-    } catch (error) {
-        logToReadme(`[${timelog()}] 🚨 Failed to claim points for ${walletAddress}: ${error.response?.data || error.message}`);
-    }
-}
-
-async function sendProof(walletAddress, privateKey) {
-    const wallet = new ethers.Wallet(privateKey);
-    const timestamp = Date.now();
-    const message = `I am submitting a proof for LayerEdge at ${timestamp}`;
-    const sign = await wallet.signMessage(message);
-    const proof = "Grow your EDGE points by completing tasks like submitting and verifying proofs, pledging and more. Points accumulated from completing the tasks are added to your node points balance."
-    
-    try {
-        //const response = await axios.post(`${BASE_URL}/light-node/claim-node-points`, { walletAddress, timestamp, sign }, { headers: HEADERS });
-
-        const response = await request(`https://dashboard.layeredge.io/api/send-proof`, {
-            method: 'POST',
-            data: { "address":walletAddress, proof, sign },
-            headers: HEADERS,
-        });
-
-        logToReadme(`[${timelog()}] ✅ Send Proof for ${walletAddress}`);
-        return response.data;
-    } catch (error) {
-        logToReadme(`[${timelog()}] 🚨 Send Proof for ${walletAddress}: ${error.response?.data || error.message}`);
-    }
-}
-
-async function proofSubmissionTask(walletAddress, privateKey) {
-    const wallet = new ethers.Wallet(privateKey);
-    const timestamp = Date.now();
-    const message = `Submit a proof task for LayerEdge at ${timestamp}`;
-    const sign = await wallet.signMessage(message);
-    
-    try {
-        //const response = await axios.post(`${BASE_URL}/light-node/claim-node-points`, { walletAddress, timestamp, sign }, { headers: HEADERS });
-
-        const response = await request(`${BASE_URL}/task/proof-submission`, {
-            method: 'POST',
-            data: { walletAddress, timestamp, sign },
-            headers: HEADERS,
-        });
-
-        logToReadme(`[${timelog()}] ✅ Submit a proof task for ${walletAddress}`);
-        return response.data;
-    } catch (error) {
-        logToReadme(`[${timelog()}] 🚨 Submit a proof task for ${walletAddress}: ${error.response?.data || error.message}`);
-    }
-}
-
 async function startNode(walletAddress, privateKey) {
     const wallet = new ethers.Wallet(privateKey);
     const timestamp = Date.now();
@@ -344,10 +277,172 @@ async function processWallet(privateKey, inviteCode) {
     if (diffDate < 0) {
         await claimPoints(walletAddress, privateKey);
         await startNode(walletAddress, privateKey);
+    }
+    await sleep(10 * 1000);
+    await submitProof(privateKey);
+    await sleep(10 * 1000);
+    await claimProofSubmissionPoints(privateKey);
+    await sleep(10 * 1000);
+    await claimLightNodePoints(privateKey);
+}
 
-        await runBrowserLightNodeTask(walletAddress, privateKey);
-        await sendProof(walletAddress, privateKey);
-        await proofSubmissionTask(walletAddress, privateKey);
+async function checkNodeStatus(privateKey) {
+    const wallet = new ethers.Wallet(privateKey);
+    const walletAddress = wallet.address;
+    const response = await request(
+        "get",
+        `https://referralapi.layeredge.io/api/light-node/node-status/${walletAddress}`
+    );
+
+    if (response && response.data && response.data.data.startTimestamp !== null) {
+        logToReadme("Node Status Running", response.data);
+        return true;
+    } else {
+        logToReadme("Node not running trying to start node...");
+        return false;
+    }
+}
+
+async function checkNodePoints() {
+    const response = await request(
+        "get",
+        `https://referralapi.layeredge.io/api/referral/wallet-details/${this.wallet.address}`
+    );
+
+    if (response && response.data) {
+        logToReadme(`${this.wallet.address} Total Points:`, response.data.data?.nodePoints || 0);
+        return true;
+    } else {
+        logToReadme("Failed to check Total Points..");
+        return false;
+    }
+}
+
+async function submitProof(privateKey) {
+    try {
+        const wallet = new ethers.Wallet(privateKey);
+        const walletAddress = wallet.address;
+
+        const timestamp = new Date().toISOString();
+        const message = `I am submitting a proof for LayerEdge at ${timestamp}`;
+        const signature = await wallet.signMessage(message);
+        
+        const proofData = {
+            proof: `GmEdgesss, GmEdgess, Awesome Layeredge at ${timestamp}`,
+            signature: signature,
+            message: message,
+            address: walletAddress
+        };
+
+        const config = {
+            data: proofData,
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': '*/*'
+            }
+        };
+
+        const response = await request(`https://dashboard.layeredge.io/api/send-proof`, {
+            method: 'POST',
+            data: proofData,
+            headers: HEADERS,
+        });
+
+        if (response && response.data && response.data.success) {
+            logToReadme(`Proof submitted successfully, ${response.data.message}`);
+            return true;
+        } else {
+            logToReadme(`Failed to submit proof, ${response?.data}`);
+            return false;
+        }
+
+    } catch (error) {
+        logToReadme(`Error submitting proof, ${error}`);
+        return false;
+    }
+}
+
+async function claimProofSubmissionPoints(privateKey) {
+    try {
+        const wallet = new ethers.Wallet(privateKey);
+        const walletAddress = wallet.address;
+
+        const timestamp = Date.now();
+        const message = `I am claiming my proof submission node points for ${wallet.address} at ${timestamp}`;
+        const sign = await wallet.signMessage(message);
+
+        const claimData = {
+            walletAddress: walletAddress,
+            timestamp: timestamp,
+            sign: sign
+        };
+
+        const config = {
+            data: claimData,
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json, text/plain, */*'
+            }
+        };
+
+        const response = await request(`https://referralapi.layeredge.io/api/task/proof-submission`, {
+            method: 'POST',
+            data: claimData,
+            headers: HEADERS,
+        });
+
+        if (response && response.data && response.data.message === "proof submission task completed successfully") {
+            logToReadme("Proof submission points claimed successfully");
+            return true;
+        } else {
+            logToReadme(`Failed to claim proof submission points, ${response?.data}`);
+            return false;
+        }
+    } catch (error) {
+        logToReadme(`Error claiming proof submission points, ${error}`);
+        return false;
+    }
+}
+
+async function claimLightNodePoints(privateKey) {
+    try {
+        const wallet = new ethers.Wallet(privateKey);
+        const walletAddress = wallet.address;
+
+        const timestamp = Date.now();
+        const message = `I am claiming my light node run task node points for ${wallet.address} at ${timestamp}`;
+        const sign = await wallet.signMessage(message);
+
+        const claimData = {
+            walletAddress: walletAddress,
+            timestamp: timestamp,
+            sign: sign
+        };
+
+        const config = {
+            data: claimData,
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json, text/plain, */*'
+            }
+        };
+
+        const response = await request(`https://referralapi.layeredge.io/api/task/node-points`, {
+            method: 'POST',
+            data: claimData,
+            headers: HEADERS,
+        });
+
+        if (response && response.data && response.data.message === "node points task completed successfully") {
+            logToReadme("Light node points claimed successfully");
+            return true;
+        } else {
+            logToReadme(`Failed to claim light node points, ${response?.data}`);
+            return false;
+        }
+    } catch (error) {
+        logToReadme(`Error claiming light node points, ${error}`);
+        return false;
     }
 }
 
