@@ -67,7 +67,7 @@ function createProxyAgent(proxy) {
         return new SocksProxyAgent(`socks${proxy.startsWith('socks5') ? 5 : 4}://${proxy.replace(/^socks[4-5]:\/\//, '')}`);
     }
     console.log(`Proxy HTTP dari proxies.txt digunakan: ${proxy}`);
-    return new HttpsProxyAgent(`http://${proxy}`);
+    return new HttpsProxyAgent(`${proxy}`);
 }
 
 async function request(url, options = {}, retries = 3) {
@@ -225,6 +225,73 @@ async function claimPoints(walletAddress, privateKey) {
     }
 }
 
+async function runBrowserLightNodeTask(walletAddress, privateKey) {
+    const wallet = new ethers.Wallet(privateKey);
+    const timestamp = Date.now();
+    const message = `I am claiming Run a Browser-Based Light Node Points for ${walletAddress} at ${timestamp}`;
+    const sign = await wallet.signMessage(message);
+    
+    try {
+        //const response = await axios.post(`${BASE_URL}/light-node/claim-node-points`, { walletAddress, timestamp, sign }, { headers: HEADERS });
+
+        const response = await request(`${BASE_URL}/task/node-points`, {
+            method: 'POST',
+            data: { walletAddress, timestamp, sign },
+            headers: HEADERS,
+        });
+
+        logToReadme(`[${timelog()}] ✅ Points claimed for ${walletAddress}`);
+        return response.data;
+    } catch (error) {
+        logToReadme(`[${timelog()}] 🚨 Failed to claim points for ${walletAddress}: ${error.response?.data || error.message}`);
+    }
+}
+
+async function sendProof(walletAddress, privateKey) {
+    const wallet = new ethers.Wallet(privateKey);
+    const timestamp = Date.now();
+    const message = `I am submitting a proof for LayerEdge at ${timestamp}`;
+    const sign = await wallet.signMessage(message);
+    const proof = "Grow your EDGE points by completing tasks like submitting and verifying proofs, pledging and more. Points accumulated from completing the tasks are added to your node points balance."
+    
+    try {
+        //const response = await axios.post(`${BASE_URL}/light-node/claim-node-points`, { walletAddress, timestamp, sign }, { headers: HEADERS });
+
+        const response = await request(`https://dashboard.layeredge.io/api/send-proof`, {
+            method: 'POST',
+            data: { "address":walletAddress, proof, sign },
+            headers: HEADERS,
+        });
+
+        logToReadme(`[${timelog()}] ✅ Send Proof for ${walletAddress}`);
+        return response.data;
+    } catch (error) {
+        logToReadme(`[${timelog()}] 🚨 Send Proof for ${walletAddress}: ${error.response?.data || error.message}`);
+    }
+}
+
+async function proofSubmissionTask(walletAddress, privateKey) {
+    const wallet = new ethers.Wallet(privateKey);
+    const timestamp = Date.now();
+    const message = `Submit a proof task for LayerEdge at ${timestamp}`;
+    const sign = await wallet.signMessage(message);
+    
+    try {
+        //const response = await axios.post(`${BASE_URL}/light-node/claim-node-points`, { walletAddress, timestamp, sign }, { headers: HEADERS });
+
+        const response = await request(`${BASE_URL}/task/proof-submission`, {
+            method: 'POST',
+            data: { walletAddress, timestamp, sign },
+            headers: HEADERS,
+        });
+
+        logToReadme(`[${timelog()}] ✅ Submit a proof task for ${walletAddress}`);
+        return response.data;
+    } catch (error) {
+        logToReadme(`[${timelog()}] 🚨 Submit a proof task for ${walletAddress}: ${error.response?.data || error.message}`);
+    }
+}
+
 async function startNode(walletAddress, privateKey) {
     const wallet = new ethers.Wallet(privateKey);
     const timestamp = Date.now();
@@ -277,6 +344,10 @@ async function processWallet(privateKey, inviteCode) {
     if (diffDate < 0) {
         await claimPoints(walletAddress, privateKey);
         await startNode(walletAddress, privateKey);
+
+        await runBrowserLightNodeTask(walletAddress, privateKey);
+        await sendProof(walletAddress, privateKey);
+        await proofSubmissionTask(walletAddress, privateKey);
     }
 }
 
